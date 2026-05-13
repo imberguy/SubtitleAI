@@ -1,0 +1,14 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+
+# Local overrides (API keys etc. — kept in localStorage, never in files)
+*.local.*
+
+# Node (if anyone adds a build step)
+node_modules/
+dist/

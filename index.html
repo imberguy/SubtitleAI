@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SubtitleAI</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- Header -->
+    <div class="header">
+      <span class="logo">SubtitleAI</span>
+      <button class="settings-btn" id="settingsBtn" title="Settings">
+        <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
+          <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+        </svg>
+        <span class="key-dot hidden" id="keyDot"></span>
+      </button>
+    </div>
+
+    <!-- Scrollable content -->
+    <div class="content">
+
+      <!-- Audio File -->
+      <section class="section">
+        <div class="section-label"><span>Audio File</span></div>
+        <div class="file-drop" id="fileDrop">
+          <input type="file" id="audioFile" accept="audio/*,video/*" hidden>
+          <div class="file-drop-inner" id="fileDropInner">
+            <div class="file-icon">&#9835;</div>
+            <div>Drop audio or <span class="link" id="browseLink">browse</span></div>
+            <div class="file-hint">MP3, WAV, M4A, MP4 &hellip;</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Templates -->
+      <section class="section">
+        <div class="section-label"><span>Templates</span></div>
+        <div class="template-row">
+          <select id="templateSelect" class="select">
+            <option value="">&#8212; select &#8212;</option>
+          </select>
+          <button class="btn-sm" id="loadTemplate">Load</button>
+          <button class="btn-sm" id="saveTemplate">Save</button>
+          <button class="btn-sm btn-danger" id="deleteTemplate" title="Delete template">&#10005;</button>
+        </div>
+        <div class="input-row" style="margin-top:6px">
+          <input type="text" id="templateName" class="input" placeholder="Template name&hellip;">
+        </div>
+      </section>
+
+      <!-- Text Style -->
+      <details class="section collapsible" open>
+        <summary class="section-label collapsible-label">
+          <span>Text Style</span><span class="chevron">&#9662;</span>
+        </summary>
+        <div class="section-body">
+
+          <div class="form-row">
+            <label>Font</label>
+            <!-- hidden field holds the PostScript name used by AE -->
+            <input type="hidden" id="fontFamily" value="Arial-BoldMT">
+            <div class="font-picker" id="fontPicker">
+              <button class="font-trigger" id="fontTrigger" type="button">
+                <span id="fontDisplayName">Arial Bold MT</span>
+                <span class="font-caret">&#9662;</span>
+              </button>
+              <div class="font-dropdown hidden" id="fontDropdown">
+                <div class="font-search-wrap">
+                  <input type="text" id="fontSearch" class="font-search-input" placeholder="Search fonts&hellip;" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="font-list-wrap" id="fontListWrap">
+                  <div class="font-loading">Loading fonts&hellip;</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label>Size</label>
+            <input type="number" id="fontSize" class="input input-num" value="52" min="8" max="500">
+            <label class="lbl-gap">Tracking</label>
+            <input type="number" id="tracking" class="input input-num" value="0" min="-500" max="1000">
+          </div>
+
+          <div class="form-row">
+            <label>Fill</label>
+            <input type="color" id="fillColor" class="color-swatch" value="#ffffff">
+            <label class="lbl-gap">Opacity %</label>
+            <input type="number" id="fillOpacity" class="input input-num" value="100" min="0" max="100">
+          </div>
+
+          <div class="form-row">
+            <label>
+              <input type="checkbox" id="strokeEnabled">
+              Stroke
+            </label>
+            <input type="color" id="strokeColor" class="color-swatch" value="#000000">
+            <label class="lbl-gap">Width</label>
+            <input type="number" id="strokeWidth" class="input input-num" value="2" min="0" max="50" step="0.5">
+          </div>
+
+          <div class="form-row">
+            <label>
+              <input type="checkbox" id="shadowEnabled" checked>
+              Shadow
+            </label>
+            <input type="color" id="shadowColor" class="color-swatch" value="#000000">
+            <label class="lbl-gap">Dist</label>
+            <input type="number" id="shadowDistance" class="input input-num" value="3" min="0" max="100">
+          </div>
+
+          <div class="form-row">
+            <label></label>
+            <label class="lbl-inline">Softness</label>
+            <input type="number" id="shadowSoftness" class="input input-num" value="5" min="0" max="100">
+            <label class="lbl-gap">Opacity %</label>
+            <input type="number" id="shadowOpacity" class="input input-num" value="75" min="0" max="100">
+          </div>
+
+          <div class="form-row">
+            <label>Align</label>
+            <div class="btn-group" id="alignGroup">
+              <button class="seg-btn" data-align="left">L</button>
+              <button class="seg-btn seg-active" data-align="center">C</button>
+              <button class="seg-btn" data-align="right">R</button>
+            </div>
+          </div>
+
+        </div>
+      </details>
+
+      <!-- Position -->
+      <details class="section collapsible" open>
+        <summary class="section-label collapsible-label">
+          <span>Position</span><span class="chevron">&#9662;</span>
+        </summary>
+        <div class="section-body">
+
+          <div class="form-row">
+            <label>Vertical</label>
+            <div class="btn-group" id="vertGroup">
+              <button class="seg-btn" data-pos="top">Top</button>
+              <button class="seg-btn" data-pos="center">Mid</button>
+              <button class="seg-btn seg-active" data-pos="bottom">Bottom</button>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label>Margin px</label>
+            <input type="number" id="margin" class="input input-num" value="80" min="0" max="1000">
+            <label class="lbl-gap">H offset</label>
+            <input type="number" id="hOffset" class="input input-num" value="0">
+          </div>
+
+        </div>
+      </details>
+
+      <!-- Timing -->
+      <details class="section collapsible">
+        <summary class="section-label collapsible-label">
+          <span>Timing &amp; Segmentation</span><span class="chevron">&#9662;</span>
+        </summary>
+        <div class="section-body">
+
+          <div class="form-row">
+            <label>Lines / sub</label>
+            <input type="number" id="maxLines" class="input input-num" value="2" min="1" max="5">
+            <label class="lbl-gap">Max chars/line</label>
+            <input type="number" id="maxChars" class="input input-num" value="42" min="10" max="120">
+          </div>
+
+          <div class="form-row">
+            <label>Max words/line</label>
+            <input type="number" id="maxWords" class="input input-num" value="7" min="1" max="30">
+            <label class="lbl-gap">Gap break (s)</label>
+            <input type="number" id="gapThreshold" class="input input-num" value="0.5" min="0.05" max="5" step="0.05">
+          </div>
+
+          <div class="form-row">
+            <label>Max dur (s)</label>
+            <input type="number" id="maxDuration" class="input input-num" value="5.0" min="0.5" max="20" step="0.5">
+            <label class="lbl-gap">End pad (s)</label>
+            <input type="number" id="endPad" class="input input-num" value="0.1" min="0" max="2" step="0.05">
+          </div>
+
+        </div>
+      </details>
+
+    </div><!-- /content -->
+
+    <!-- Footer -->
+    <div class="footer">
+      <div id="previewLine" class="preview-line"></div>
+      <div id="statusMsg" class="status"></div>
+      <button class="btn-generate" id="generateBtn">
+        <div class="spinner hidden" id="spinner"></div>
+        <span id="generateBtnLabel">Generate Subtitles</span>
+      </button>
+    </div>
+
+    <!-- Settings modal -->
+    <div class="modal-overlay hidden" id="settingsOverlay">
+      <div class="modal">
+        <div class="modal-header">
+          <span class="modal-title">Settings</span>
+          <button class="modal-close" id="settingsClose">&#10005;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field-label">
+            <span>ElevenLabs API Key</span>
+            <a class="help-link" id="apiKeyLink">Get key ↗</a>
+          </div>
+          <div class="input-row">
+            <input type="password" id="apiKey" class="input" placeholder="sk_..." autocomplete="off" spellcheck="false">
+            <button class="icon-btn" id="toggleApiKey" title="Show / hide">&#128065;</button>
+          </div>
+          <p class="modal-hint">Stored locally &mdash; only sent to ElevenLabs.</p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /app -->
+
+  <script src="js/CSInterface.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
