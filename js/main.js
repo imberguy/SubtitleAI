@@ -35,6 +35,7 @@
     initGenerate();
     initFontPicker();
     initStyleSync();
+    initFindReplace();
     loadHostScript();
   });
 
@@ -521,6 +522,59 @@
       parseInt(hex.slice(3, 5), 16) / 255,
       parseInt(hex.slice(5, 7), 16) / 255
     ];
+  }
+
+  // ---- Find & Replace -----------------------------------------
+  function initFindReplace() {
+    on('frBtn', 'click', runFindReplace);
+    // Clear result when either input changes
+    on('frFind',    'input', () => hideFrResult());
+    on('frReplace', 'input', () => hideFrResult());
+  }
+
+  function hideFrResult() {
+    const el = $('frResult');
+    el.textContent = '';
+    el.className = 'fr-result hidden';
+  }
+
+  async function runFindReplace() {
+    const find    = $('frFind').value;
+    const replace = $('frReplace').value;
+
+    if (!find.trim()) {
+      showFrResult('Enter a search term.', 'warn');
+      return;
+    }
+
+    const payload = {
+      find,
+      replace,
+      caseSensitive: $('frCaseSensitive').checked
+    };
+
+    const result = await evalAsync(
+      `findReplaceSubtitles(${JSON.stringify(JSON.stringify(payload))})`
+    );
+
+    if (!result || result.startsWith('ERROR')) {
+      showFrResult(result || 'Unknown error.', 'err');
+    } else {
+      const count = parseInt(result.split(':')[1], 10);
+      if (count === 0) {
+        showFrResult(`"${find}" not found.`, 'warn');
+      } else {
+        showFrResult(
+          `${count} replacement${count !== 1 ? 's' : ''} made.`, ''
+        );
+      }
+    }
+  }
+
+  function showFrResult(msg, cls) {
+    const el = $('frResult');
+    el.textContent = msg;
+    el.className = 'fr-result' + (cls ? ' ' + cls : '');
   }
 
   // ---- Generate -----------------------------------------------

@@ -189,6 +189,37 @@
         </div>
       </details>
 
+      <!-- Find & Replace -->
+      <details class="section collapsible">
+        <summary class="section-label collapsible-label">
+          <span>Find &amp; Replace</span><span class="chevron">&#9662;</span>
+        </summary>
+        <div class="section-body">
+
+          <div class="form-row">
+            <label>Find</label>
+            <input type="text" id="frFind" class="input" placeholder="Word or phrase&hellip;" autocomplete="off" spellcheck="false">
+          </div>
+
+          <div class="form-row">
+            <label>Replace</label>
+            <input type="text" id="frReplace" class="input" placeholder="Replacement&hellip;" autocomplete="off" spellcheck="false">
+          </div>
+
+          <div class="form-row">
+            <label></label>
+            <label class="fr-case-label">
+              <input type="checkbox" id="frCaseSensitive" checked>
+              Case sensitive
+            </label>
+          </div>
+
+          <button class="btn-fr" id="frBtn">Replace All</button>
+          <div class="fr-result hidden" id="frResult"></div>
+
+        </div>
+      </details>
+
     </div><!-- /content -->
 
     <!-- Footer -->

@@ -171,10 +171,10 @@ function updateSubtitleStyle(jsonString) {
         var sourceText = textLayer.property("Source Text");
 
         for (var k = 1; k <= sourceText.numKeys; k++) {
-            var td   = sourceText.valueAtKey(k); // layer-bound copy at this keyframe
-            var text = td.text;                  // preserve existing subtitle text
-            styleDoc(td, settings);              // resetCharStyle() then re-apply style
-            td.text = text;                      // restore text (resetCharStyle clears it)
+            var td   = sourceText.valueAtKey(k);
+            var text = td.text;
+            styleDoc(td, settings);
+            td.text = text;
             sourceText.setValueAtKey(k, td);
         }
 
@@ -183,6 +183,58 @@ function updateSubtitleStyle(jsonString) {
 
         app.endUndoGroup();
         return "SUCCESS";
+    } catch(e) {
+        app.endUndoGroup();
+        return "ERROR: " + e.toString();
+    }
+}
+
+// ---- findReplaceSubtitles -----------------------------------------
+// Searches every Source Text keyframe for `find` and replaces with
+// `replace`. Only modifies text content — styling is untouched.
+// Returns "REPLACED:N" (N = total substitution count) or "ERROR: ...".
+function findReplaceSubtitles(jsonString) {
+    var data;
+    try { data = JSON.parse(jsonString); }
+    catch(e) { return "ERROR: " + e.toString(); }
+
+    var find          = data.find;
+    var replace       = data.replace;
+    var caseSensitive = (data.caseSensitive !== false); // default true
+
+    if (!find || find.length === 0) return "ERROR: Search term is empty.";
+
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) return "ERROR: No active composition.";
+
+    var textLayer = findSubtitleLayer(comp);
+    if (!textLayer) return "ERROR: No subtitle layer found. Generate subtitles first.";
+
+    // Escape regex metacharacters so literal strings like "e.g." work safely
+    var escaped = find.replace(/[-[\]{}()*+?.,\\^$|#]/g, "\\$&");
+    var flags   = caseSensitive ? "g" : "gi";
+    var pattern = new RegExp(escaped, flags);
+
+    var sourceText = textLayer.property("Source Text");
+    var totalCount = 0;
+
+    app.beginUndoGroup("SubtitleAI: Find & Replace");
+    try {
+        for (var k = 1; k <= sourceText.numKeys; k++) {
+            var td       = sourceText.valueAtKey(k);
+            var original = td.text;
+            if (!original) continue;
+
+            var matches = original.match(pattern);
+            if (!matches) continue;
+
+            totalCount += matches.length;
+            td.text = original.replace(pattern, replace);
+            sourceText.setValueAtKey(k, td);
+        }
+
+        app.endUndoGroup();
+        return "REPLACED:" + totalCount;
     } catch(e) {
         app.endUndoGroup();
         return "ERROR: " + e.toString();

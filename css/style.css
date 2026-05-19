@@ -458,6 +458,41 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---- Find & Replace --------------------------------------- */
+.fr-case-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--txt-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.btn-fr {
+  width: 100%;
+  margin-top: 2px;
+  padding: 7px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--txt);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.btn-fr:hover { background: #444; border-color: #555; }
+.btn-fr:active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.fr-result {
+  font-size: 11px;
+  text-align: center;
+  padding: 4px 0 2px;
+  color: var(--success);
+}
+.fr-result.err  { color: var(--danger); }
+.fr-result.warn { color: var(--warn); }
+
 /* ---- Misc -------------------------------------------------- */
 .help-link {
   color: var(--accent);
