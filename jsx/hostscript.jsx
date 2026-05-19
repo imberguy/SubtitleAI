@@ -190,19 +190,28 @@ function updateSubtitleStyle(jsonString) {
 }
 
 // ---- findReplaceSubtitles -----------------------------------------
-// Searches every Source Text keyframe for `find` and replaces with
-// `replace`. Only modifies text content — styling is untouched.
-// Returns "REPLACED:N" (N = total substitution count) or "ERROR: ...".
+// Iterates every Source Text keyframe, replaces all occurrences of
+// `find` with `replace`. Styling and timing are never touched.
+// Returns "REPLACED:N" or "ERROR: ...".
+//
+// Avoids three ExtendScript pitfalls:
+//  1. setValueAtKey is unreliable for TextDocument — we snapshot all
+//     keyframe times/values first, then write back via setValueAtTime
+//     and re-stamp HOLD interpolation afterwards.
+//  2. Global-flagged RegExp reused across iterations drifts its lastIndex
+//     in ES3 — we use plain string operations instead.
+//  3. String.replace treats "$" in the replacement as a back-reference
+//     pattern — split/join never does.
 function findReplaceSubtitles(jsonString) {
     var data;
     try { data = JSON.parse(jsonString); }
     catch(e) { return "ERROR: " + e.toString(); }
 
-    var find          = data.find;
-    var replace       = data.replace;
-    var caseSensitive = (data.caseSensitive !== false); // default true
+    var needle        = data.find;
+    var replacement   = data.replace;
+    var caseSensitive = (data.caseSensitive !== false);
 
-    if (!find || find.length === 0) return "ERROR: Search term is empty.";
+    if (!needle || needle.length === 0) return "ERROR: Search term is empty.";
 
     var comp = app.project.activeItem;
     if (!comp || !(comp instanceof CompItem)) return "ERROR: No active composition.";
@@ -210,29 +219,84 @@ function findReplaceSubtitles(jsonString) {
     var textLayer = findSubtitleLayer(comp);
     if (!textLayer) return "ERROR: No subtitle layer found. Generate subtitles first.";
 
-    // Escape regex metacharacters so literal strings like "e.g." work safely
-    var escaped = find.replace(/[-[\]{}()*+?.,\\^$|#]/g, "\\$&");
-    var flags   = caseSensitive ? "g" : "gi";
-    var pattern = new RegExp(escaped, flags);
-
     var sourceText = textLayer.property("Source Text");
-    var totalCount = 0;
+    var numKeys    = sourceText.numKeys;
+    if (numKeys === 0) return "REPLACED:0";
 
+    // -- Plain-string replace helpers (no regex, no $-interpretation) --
+
+    function replaceAllCS(str, find, repl) {
+        // Case-sensitive: split on exact match and rejoin
+        return str.split(find).join(repl);
+    }
+
+    function countCS(str, find) {
+        return str.split(find).length - 1;
+    }
+
+    function replaceAllCI(str, find, repl) {
+        // Case-insensitive: manual indexOf loop, preserves original casing
+        var lower  = str.toLowerCase();
+        var needle = find.toLowerCase();
+        var out    = "";
+        var pos    = 0;
+        while (true) {
+            var idx = lower.indexOf(needle, pos);
+            if (idx === -1) { out += str.substring(pos); break; }
+            out += str.substring(pos, idx) + repl;
+            pos  = idx + needle.length;
+        }
+        return out;
+    }
+
+    function countCI(str, find) {
+        var lower  = str.toLowerCase();
+        var needle = find.toLowerCase();
+        var count  = 0;
+        var pos    = 0;
+        while (true) {
+            var idx = lower.indexOf(needle, pos);
+            if (idx === -1) break;
+            count++;
+            pos = idx + needle.length;
+        }
+        return count;
+    }
+
+    // -- Snapshot all keyframes (time + TextDocument) --
+    var frames = [];
+    for (var k = 1; k <= numKeys; k++) {
+        frames.push({ time: sourceText.keyTime(k), td: sourceText.valueAtKey(k) });
+    }
+
+    // -- Apply replacements to the snapshots --
+    var totalCount = 0;
+    for (var i = 0; i < frames.length; i++) {
+        var original = frames[i].td.text;
+        if (!original) continue;
+
+        var hits = caseSensitive ? countCS(original, needle) : countCI(original, needle);
+        if (hits === 0) continue;
+
+        totalCount += hits;
+        frames[i].td.text = caseSensitive
+            ? replaceAllCS(original, needle, replacement)
+            : replaceAllCI(original, needle, replacement);
+    }
+
+    if (totalCount === 0) return "REPLACED:0";
+
+    // -- Write back every keyframe and restore HOLD interpolation --
     app.beginUndoGroup("SubtitleAI: Find & Replace");
     try {
-        for (var k = 1; k <= sourceText.numKeys; k++) {
-            var td       = sourceText.valueAtKey(k);
-            var original = td.text;
-            if (!original) continue;
-
-            var matches = original.match(pattern);
-            if (!matches) continue;
-
-            totalCount += matches.length;
-            td.text = original.replace(pattern, replace);
-            sourceText.setValueAtKey(k, td);
+        for (var i = 0; i < frames.length; i++) {
+            sourceText.setValueAtTime(frames[i].time, frames[i].td);
         }
-
+        for (var k = 1; k <= sourceText.numKeys; k++) {
+            sourceText.setInterpolationTypeAtKey(
+                k, KeyframeInterpolationType.HOLD, KeyframeInterpolationType.HOLD
+            );
+        }
         app.endUndoGroup();
         return "REPLACED:" + totalCount;
     } catch(e) {
