@@ -542,36 +542,126 @@
     const find    = $('frFind').value;
     const replace = $('frReplace').value;
 
-    if (!find.trim()) {
-      showFrResult('Enter a search term.', 'warn');
-      return;
-    }
+    if (!find.trim()) { showFrResult('Enter a search term.', 'warn'); return; }
 
-    const payload = { find, replace, caseSensitive: $('frCaseSensitive').checked };
+    // Show immediate feedback so the user knows the click registered
+    showFrResult('Replacing…', '');
+    $('frBtn').disabled = true;
+
+    // Build the entire find-replace logic as a self-contained inline IIFE.
+    // We do NOT call findReplaceSubtitles() by name because in newer AE/CEP
+    // versions, calling an undefined function silently hangs evalScript's
+    // callback instead of returning "EvalScript error." — leaving the Promise
+    // pending forever. Inlining the script removes that dependency entirely.
+    const needle        = find;
+    const repl          = replace;
+    const cs            = $('frCaseSensitive').checked;
+
+    const script = `(function () {
+  var needle = ${JSON.stringify(needle)};
+  var repl   = ${JSON.stringify(repl)};
+  var cs     = ${cs ? 'true' : 'false'};
+
+  var comp = app.project.activeItem;
+  if (!comp || !(comp instanceof CompItem)) return "ERROR: No active composition.";
+
+  // Prefer the first selected layer that has Source Text keyframes
+  var layer = null;
+  var sel   = comp.selectedLayers;
+  for (var si = 0; si < sel.length; si++) {
+    try { var st = sel[si].property("Source Text"); if (st && st.numKeys > 0) { layer = sel[si]; break; } } catch(e) {}
+  }
+  // Fall back to the SubtitleAI layer
+  if (!layer) {
+    for (var li = 1; li <= comp.layers.length; li++) {
+      if (comp.layers[li].name === "Subtitles [SubtitleAI]") { layer = comp.layers[li]; break; }
+    }
+  }
+  if (!layer) return "ERROR: No text layer with keyframes found. Select a subtitle layer first.";
+
+  var sourceProp = layer.property("Source Text");
+  var nKeys      = sourceProp.numKeys;
+  if (nKeys === 0) return "ERROR: Layer has no Source Text keyframes.";
+
+  // Read phase — snapshot every keyframe time + text
+  var times = [], oldTexts = [], newTexts = [];
+  var needleLo = needle.toLowerCase();
+  var totalCount = 0;
+
+  for (var k = 1; k <= nKeys; k++) {
+    var t    = sourceProp.keyTime(k);
+    var orig = sourceProp.valueAtKey(k).text || "";
+    times.push(t);
+    oldTexts.push(orig);
+
+    var compare = cs ? orig : orig.toLowerCase();
+    var search  = cs ? needle : needleLo;
+    if (compare.indexOf(search) === -1) { newTexts.push(null); continue; }
+
+    // Replace with plain split/join (never mis-interprets "$" in the replacement)
+    var out = ""; var pos = 0; var count = 0;
+    while (true) {
+      var idx = compare.indexOf(search, pos);
+      if (idx === -1) { out += orig.substring(pos); break; }
+      out += orig.substring(pos, idx) + repl;
+      pos = idx + needle.length;
+      count++;
+    }
+    newTexts.push(out);
+    totalCount += count;
+  }
+
+  if (totalCount === 0) {
+    var sample = oldTexts[0] ? oldTexts[0].substring(0, 50) : "(empty)";
+    return "REPLACED:0|sample:" + sample;
+  }
+
+  // Write phase — use sourceText.value (live, layer-bound) + setValueAtTime,
+  // the same proven pattern as createSubtitleLayer
+  app.beginUndoGroup("SubtitleAI: Find & Replace");
+  try {
+    var liveTD = sourceProp.value;
+    for (var i = 0; i < newTexts.length; i++) {
+      if (newTexts[i] === null) continue;
+      liveTD.text = newTexts[i];
+      sourceProp.setValueAtTime(times[i], liveTD);
+    }
+    // Restore HOLD on every keyframe
+    for (var k = 1; k <= sourceProp.numKeys; k++) {
+      sourceProp.setInterpolationTypeAtKey(k,
+        KeyframeInterpolationType.HOLD, KeyframeInterpolationType.HOLD);
+    }
+    app.endUndoGroup();
+    return "REPLACED:" + totalCount;
+  } catch (e) {
+    app.endUndoGroup();
+    return "ERROR: write failed: " + e.toString();
+  }
+})()`;
 
     let result;
     try {
-      result = await evalAsync(
-        `findReplaceSubtitles(${JSON.stringify(JSON.stringify(payload))})`
-      );
+      result = await evalAsync(script);
     } catch(e) {
-      showFrResult('ExtendScript error — try reopening the panel.', 'err');
+      showFrResult('ExtendScript bridge error: ' + e.message, 'err');
+      $('frBtn').disabled = false;
       return;
     }
+
+    $('frBtn').disabled = false;
 
     if (!result || result === 'EvalScript error.' || result.startsWith('ERROR')) {
       showFrResult(result || 'Unknown error.', 'err');
       return;
     }
 
-    // "REPLACED:N" or "REPLACED:0|sample:..."
     const parts = result.split('|');
     const count = parseInt(parts[0].split(':')[1], 10);
+    if (isNaN(count)) { showFrResult('Unexpected response: ' + result, 'err'); return; }
 
     if (count === 0) {
-      // Include the sample text from the layer to help spot mismatches
       const sample = parts[1] ? parts[1].replace('sample:', '') : '';
-      const hint   = sample ? ` (keyframe contains: "${sample}…")` : '';
+      const hint   = sample ? ` — keyframe text: "${sample}"` : '';
       showFrResult(`"${find}" not found.${hint}`, 'warn');
     } else {
       showFrResult(`${count} replacement${count !== 1 ? 's' : ''} made.`, '');
