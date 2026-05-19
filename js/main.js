@@ -547,27 +547,34 @@
       return;
     }
 
-    const payload = {
-      find,
-      replace,
-      caseSensitive: $('frCaseSensitive').checked
-    };
+    const payload = { find, replace, caseSensitive: $('frCaseSensitive').checked };
 
-    const result = await evalAsync(
-      `findReplaceSubtitles(${JSON.stringify(JSON.stringify(payload))})`
-    );
+    let result;
+    try {
+      result = await evalAsync(
+        `findReplaceSubtitles(${JSON.stringify(JSON.stringify(payload))})`
+      );
+    } catch(e) {
+      showFrResult('ExtendScript error — try reopening the panel.', 'err');
+      return;
+    }
 
-    if (!result || result.startsWith('ERROR')) {
+    if (!result || result === 'EvalScript error.' || result.startsWith('ERROR')) {
       showFrResult(result || 'Unknown error.', 'err');
+      return;
+    }
+
+    // "REPLACED:N" or "REPLACED:0|sample:..."
+    const parts = result.split('|');
+    const count = parseInt(parts[0].split(':')[1], 10);
+
+    if (count === 0) {
+      // Include the sample text from the layer to help spot mismatches
+      const sample = parts[1] ? parts[1].replace('sample:', '') : '';
+      const hint   = sample ? ` (keyframe contains: "${sample}…")` : '';
+      showFrResult(`"${find}" not found.${hint}`, 'warn');
     } else {
-      const count = parseInt(result.split(':')[1], 10);
-      if (count === 0) {
-        showFrResult(`"${find}" not found.`, 'warn');
-      } else {
-        showFrResult(
-          `${count} replacement${count !== 1 ? 's' : ''} made.`, ''
-        );
-      }
+      showFrResult(`${count} replacement${count !== 1 ? 's' : ''} made.`, '');
     }
   }
 

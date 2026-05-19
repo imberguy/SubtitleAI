@@ -66,6 +66,20 @@ function findSubtitleLayer(comp) {
     return null;
 }
 
+// Returns the best target layer for Find & Replace:
+// 1. First selected layer that has Source Text keyframes, OR
+// 2. The "Subtitles [SubtitleAI]" layer
+function findTargetTextLayer(comp) {
+    var sel = comp.selectedLayers;
+    for (var i = 0; i < sel.length; i++) {
+        try {
+            var st = sel[i].property("Source Text");
+            if (st && st.numKeys > 0) return sel[i];
+        } catch(_) {}
+    }
+    return findSubtitleLayer(comp);
+}
+
 // ---- getAvailableFonts --------------------------------------------
 function getAvailableFonts() {
     var fonts = [];
@@ -190,18 +204,14 @@ function updateSubtitleStyle(jsonString) {
 }
 
 // ---- findReplaceSubtitles -----------------------------------------
-// Iterates every Source Text keyframe, replaces all occurrences of
-// `find` with `replace`. Styling and timing are never touched.
-// Returns "REPLACED:N" or "ERROR: ...".
+// Targets: the first selected layer with Source Text keyframes, or
+// "Subtitles [SubtitleAI]" as a fallback.
 //
-// Avoids three ExtendScript pitfalls:
-//  1. setValueAtKey is unreliable for TextDocument — we snapshot all
-//     keyframe times/values first, then write back via setValueAtTime
-//     and re-stamp HOLD interpolation afterwards.
-//  2. Global-flagged RegExp reused across iterations drifts its lastIndex
-//     in ES3 — we use plain string operations instead.
-//  3. String.replace treats "$" in the replacement as a back-reference
-//     pattern — split/join never does.
+// Write strategy mirrors createSubtitleLayer's stamp():
+//   sourceText.value  →  layer-bound live doc  →  setValueAtTime
+// This is the only pattern proven to persist TextDocument changes in AE.
+// Snapshots from valueAtKey() are used READ-ONLY for text content;
+// they are never written back directly.
 function findReplaceSubtitles(jsonString) {
     var data;
     try { data = JSON.parse(jsonString); }
@@ -216,82 +226,63 @@ function findReplaceSubtitles(jsonString) {
     var comp = app.project.activeItem;
     if (!comp || !(comp instanceof CompItem)) return "ERROR: No active composition.";
 
-    var textLayer = findSubtitleLayer(comp);
-    if (!textLayer) return "ERROR: No subtitle layer found. Generate subtitles first.";
+    var textLayer = findTargetTextLayer(comp);
+    if (!textLayer) return "ERROR: No text layer with keyframes found. Select the subtitle layer or generate subtitles first.";
 
     var sourceText = textLayer.property("Source Text");
     var numKeys    = sourceText.numKeys;
-    if (numKeys === 0) return "REPLACED:0";
+    if (numKeys === 0) return "ERROR: Layer has no Source Text keyframes.";
 
-    // -- Plain-string replace helpers (no regex, no $-interpretation) --
+    // Plain string helpers — no regex, no $ back-reference issues
+    var searchLower = needle.toLowerCase();
 
-    function replaceAllCS(str, find, repl) {
-        // Case-sensitive: split on exact match and rejoin
-        return str.split(find).join(repl);
-    }
+    function doReplace(original) {
+        if (!original) return null;
+        var compare = caseSensitive ? original : original.toLowerCase();
+        var search  = caseSensitive ? needle   : searchLower;
+        if (compare.indexOf(search) === -1) return null; // no match
 
-    function countCS(str, find) {
-        return str.split(find).length - 1;
-    }
-
-    function replaceAllCI(str, find, repl) {
-        // Case-insensitive: manual indexOf loop, preserves original casing
-        var lower  = str.toLowerCase();
-        var needle = find.toLowerCase();
-        var out    = "";
-        var pos    = 0;
+        var out = "";
+        var pos = 0;
+        var count = 0;
         while (true) {
-            var idx = lower.indexOf(needle, pos);
-            if (idx === -1) { out += str.substring(pos); break; }
-            out += str.substring(pos, idx) + repl;
-            pos  = idx + needle.length;
-        }
-        return out;
-    }
-
-    function countCI(str, find) {
-        var lower  = str.toLowerCase();
-        var needle = find.toLowerCase();
-        var count  = 0;
-        var pos    = 0;
-        while (true) {
-            var idx = lower.indexOf(needle, pos);
-            if (idx === -1) break;
-            count++;
+            var idx = compare.indexOf(search, pos);
+            if (idx === -1) { out += original.substring(pos); break; }
+            out += original.substring(pos, idx) + replacement;
             pos = idx + needle.length;
+            count++;
         }
-        return count;
+        return { text: out, count: count };
     }
 
-    // -- Snapshot all keyframes (time + TextDocument) --
-    var frames = [];
-    for (var k = 1; k <= numKeys; k++) {
-        frames.push({ time: sourceText.keyTime(k), td: sourceText.valueAtKey(k) });
-    }
-
-    // -- Apply replacements to the snapshots --
+    // Read phase — collect what needs changing (valueAtKey is safe for reads)
+    var changes = [];
     var totalCount = 0;
-    for (var i = 0; i < frames.length; i++) {
-        var original = frames[i].td.text;
-        if (!original) continue;
-
-        var hits = caseSensitive ? countCS(original, needle) : countCI(original, needle);
-        if (hits === 0) continue;
-
-        totalCount += hits;
-        frames[i].td.text = caseSensitive
-            ? replaceAllCS(original, needle, replacement)
-            : replaceAllCI(original, needle, replacement);
+    for (var k = 1; k <= numKeys; k++) {
+        var original = sourceText.valueAtKey(k).text || "";
+        var result   = doReplace(original);
+        if (result) {
+            changes.push({ keyIndex: k, time: sourceText.keyTime(k), text: result.text });
+            totalCount += result.count;
+        }
     }
 
-    if (totalCount === 0) return "REPLACED:0";
+    if (totalCount === 0) {
+        // Return a sample of actual keyframe text to help diagnose mismatches
+        var sample = (sourceText.valueAtKey(1).text || "").substring(0, 40);
+        return "REPLACED:0|sample:" + sample;
+    }
 
-    // -- Write back every keyframe and restore HOLD interpolation --
+    // Write phase — use sourceText.value (live, layer-bound) + setValueAtTime,
+    // the same proven pattern used in createSubtitleLayer
     app.beginUndoGroup("SubtitleAI: Find & Replace");
     try {
-        for (var i = 0; i < frames.length; i++) {
-            sourceText.setValueAtTime(frames[i].time, frames[i].td);
+        var liveTD = sourceText.value; // live layer-bound document
+        for (var i = 0; i < changes.length; i++) {
+            liveTD.text = changes[i].text;
+            sourceText.setValueAtTime(changes[i].time, liveTD);
         }
+        // Restore HOLD on every keyframe (setValueAtTime may reset interpolation)
         for (var k = 1; k <= sourceText.numKeys; k++) {
             sourceText.setInterpolationTypeAtKey(
                 k, KeyframeInterpolationType.HOLD, KeyframeInterpolationType.HOLD
