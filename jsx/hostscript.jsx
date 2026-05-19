@@ -9,7 +9,7 @@ function applyJustification(td, align) {
 }
 
 // styleDoc: applies all style settings to a layer-bound TextDocument.
-// Must be called on a doc obtained from sourceText.value or valueAtKey(),
+// Must be called on a doc obtained from sourceText.value or keyValue(),
 // NOT on a free-standing new TextDocument() — AE rejects property writes on those.
 // resetCharStyle() is called first to wipe any character-panel overrides
 // (allCaps, smallCaps, etc.) before we apply our own settings.
@@ -185,7 +185,7 @@ function updateSubtitleStyle(jsonString) {
         var sourceText = textLayer.property("Source Text");
 
         for (var k = 1; k <= sourceText.numKeys; k++) {
-            var td   = sourceText.valueAtKey(k);
+            var td   = sourceText.keyValue(k);
             var text = td.text;
             styleDoc(td, settings);
             td.text = text;
@@ -210,7 +210,7 @@ function updateSubtitleStyle(jsonString) {
 // Write strategy mirrors createSubtitleLayer's stamp():
 //   sourceText.value  →  layer-bound live doc  →  setValueAtTime
 // This is the only pattern proven to persist TextDocument changes in AE.
-// Snapshots from valueAtKey() are used READ-ONLY for text content;
+// Snapshots from keyValue() are used READ-ONLY for text content;
 // they are never written back directly.
 function findReplaceSubtitles(jsonString) {
     var data;
@@ -255,11 +255,11 @@ function findReplaceSubtitles(jsonString) {
         return { text: out, count: count };
     }
 
-    // Read phase — collect what needs changing (valueAtKey is safe for reads)
+    // Read phase — collect what needs changing (keyValue is safe for reads)
     var changes = [];
     var totalCount = 0;
     for (var k = 1; k <= numKeys; k++) {
-        var original = sourceText.valueAtKey(k).text || "";
+        var original = sourceText.keyValue(k).text || "";
         var result   = doReplace(original);
         if (result) {
             changes.push({ keyIndex: k, time: sourceText.keyTime(k), text: result.text });
@@ -269,7 +269,7 @@ function findReplaceSubtitles(jsonString) {
 
     if (totalCount === 0) {
         // Return a sample of actual keyframe text to help diagnose mismatches
-        var sample = (sourceText.valueAtKey(1).text || "").substring(0, 40);
+        var sample = (sourceText.keyValue(1).text || "").substring(0, 40);
         return "REPLACED:0|sample:" + sample;
     }
 

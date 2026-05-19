@@ -146,7 +146,7 @@ Panel (HTML/CSS/JS)
 - **Single text layer + HOLD keyframes** — one layer is easier to manage than hundreds of individual text layers; expressions or other scripts can target it predictably.
 - **`resetCharStyle()` before every write** — AE inherits `allCaps`/`smallCaps` and other character-panel state onto new TextDocument objects. Resetting first guarantees consistent output regardless of what the user had open in the Character panel.
 - **JSX loaded at runtime** — `ScriptPath` in the manifest caused silent panel-open failures on AE 2026; we read and eval the `.jsx` file ourselves via `window.cep.fs` after the panel loads.
-- **`new TextDocument()` is not used** — AE rejects style-property writes on detached TextDocuments; all styling is applied to layer-bound documents obtained from `sourceText.value` or `valueAtKey()`.
+- **`new TextDocument()` is not used** — AE rejects style-property writes on detached TextDocuments; all styling is applied to layer-bound documents obtained from `sourceText.value` or `keyValue()`.
 
 ---
 

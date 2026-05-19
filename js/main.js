@@ -605,7 +605,7 @@
         '      var _total = 0;',
         '      for (var _k = 1; _k <= _nk; _k++) {',
         '        var _t    = _prop.keyTime(_k);',
-        '        var _orig = _prop.valueAtKey(_k).text || "";',
+        '        var _orig = _prop.keyValue(_k).text || "";',
         '        _times.push(_t); _old.push(_orig);',
         '        var _cmp = _cs ? _orig : _orig.toLowerCase();',
         '        var _sch = _cs ? _needle : _nlo;',
